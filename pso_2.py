@@ -1,28 +1,21 @@
 import random
 import math
 import matplotlib.pyplot as plt
-from util import (
-    City,
-    read_cities,
-    path_cost,
-)
+from util import City, read_cities, path_cost
 
 
 class Particle:
     def __init__(self, route, cost=None):
         self.route = route
-        self.pbest = route
+        self.pbest = route[:]
         self.current_cost = cost if cost else self.path_cost()
         self.pbest_cost = cost if cost else self.path_cost()
-        self.velocity = [random.random() for _ in range(len(route))]
-
-    def clear_velocity(self):
-        self.velocity = [0 for _ in range(len(self.route))]
+        self.velocity = [0] * len(route)
 
     def update_costs_and_pbest(self):
         self.current_cost = self.path_cost()
         if self.current_cost < self.pbest_cost:
-            self.pbest = self.route
+            self.pbest = self.route[:]
             self.pbest_cost = self.current_cost
 
     def path_cost(self):
@@ -30,14 +23,12 @@ class Particle:
 
 
 class PSO:
-
     def __init__(
         self,
         iterations,
         population_size,
-        w,
-        c1,
-        c2,
+        c1=1.5,
+        c2=1.5,
         cities=None,
     ):
         self.cities = cities
@@ -46,9 +37,8 @@ class PSO:
         self.iterations = iterations
         self.population_size = population_size
         self.particles = []
-        self.w = w
-        self.c1 = c1
-        self.c2 = c2
+        self.cognitive_constant = c1
+        self.social_constant = c2
 
         solutions = self.initial_population()
         self.particles = [Particle(route=solution) for solution in solutions]
@@ -56,88 +46,86 @@ class PSO:
     def random_route(self):
         return random.sample(self.cities, len(self.cities))
 
-    def initial_population(self):
-        random_population = [
-            self.random_route() for _ in range(self.population_size - 1)
-        ]
-        greedy_population = [self.greedy_route(0)]
-        return [*random_population]
-        # return [*random_population]
+    def swap_positions(self, route, pos1, pos2):
+        route[pos1], route[pos2] = route[pos2], route[pos1]
 
-    # tạo đầu vào tốt hơn
-    def greedy_route(self, start_index):
-        unvisited = self.cities[:]
-        del unvisited[start_index]
-        route = [self.cities[start_index]]
-        while len(unvisited):
-            index, nearest_city = min(
-                enumerate(unvisited), key=lambda item: item[1].distance(route[-1])
-            )
-            route.append(nearest_city)
-            del unvisited[index]
-        return route
+    def initial_population(self):
+        random_population = [self.random_route() for _ in range(self.population_size)]
+        return random_population
 
     def run(self):
         self.gbest = min(self.particles, key=lambda p: p.pbest_cost)
-        print(f"initial cost is {self.gbest.pbest_cost}")
+        print(f"Initial cost is {self.gbest.pbest_cost}")
         plt.ion()
         plt.draw()
         for t in range(self.iterations):
-            if t % 20 == 0:
+            if t % 100 == 0:
                 plt.figure(0)
-                plt.plot(pso.gcost_iter, "g")
+                plt.plot(self.gcost_iter, "orange")
                 plt.ylabel("Distance")
-                plt.xlabel("Generation")
+                plt.xlabel("Iterations")
                 fig = plt.figure(0)
-                fig.suptitle("pso iter")
+                plt.legend(["Distance"])
                 x_list, y_list = [], []
                 for city in self.gbest.pbest:
                     x_list.append(city.x)
                     y_list.append(city.y)
-                x_list.append(pso.gbest.pbest[0].x)
-                y_list.append(pso.gbest.pbest[0].y)
+                x_list.append(self.gbest.pbest[0].x)
+                y_list.append(self.gbest.pbest[0].y)
                 fig = plt.figure(1)
                 fig.clear()
-                fig.suptitle(f"pso TSP iter thứ {t}")
-
+                fig.suptitle(f"PSO TSP Iteration {t}")
+                plt.xlabel("x")
+                plt.ylabel("y")
                 plt.plot(x_list, y_list, "ro")
                 plt.plot(x_list, y_list, "g--")
                 plt.draw()
-                plt.pause(0.01)
+                plt.pause(0.001)
             self.gcost_iter.append(self.gbest.pbest_cost)
             for particle in self.particles:
-                for i in range(len(self.cities)):
-                    r1 = random.random()
-                    r2 = random.random()
-                    new_velocity = (
-                        self.w * particle.velocity[i]
-                        + self.c1 * r1 * (particle.pbest[i].distance(particle.route[i]))
-                        + self.c2
-                        * r2
-                        * (self.gbest.pbest[i].distance(particle.route[i]))
+                new_velocity = []
+                for i in range(len(particle.route)):
+                    r1, r2 = random.random(), random.random()
+                    cognitive_velocity = (
+                        self.cognitive_constant
+                        * r1
+                        * (particle.pbest[i].x - particle.route[i].x)
                     )
-                particle.velocity[i] = new_velocity
-                # Update position
-                new_x = particle.route[i].x + new_velocity
-                new_y = particle.route[i].y + new_velocity
-                particle.route[i] = City(new_x, new_y)
+                    social_velocity = (
+                        self.social_constant
+                        * r2
+                        * (self.gbest.pbest[i].x - particle.route[i].x)
+                    )
+                    new_velocity.append(cognitive_velocity + social_velocity)
+                particle.velocity = new_velocity
+
+                new_route = particle.route[:]
+                for i in range(len(new_route)):
+                    swap_index = int(particle.velocity[i]) % len(new_route)
+                    new_route[i], new_route[swap_index] = (
+                        new_route[swap_index],
+                        new_route[i],
+                    )
+
+                particle.route = new_route
                 particle.update_costs_and_pbest()
+
+                # Cập nhật gbest nếu cần
                 if particle.pbest_cost < self.gbest.pbest_cost:
                     self.gbest = particle
 
 
 if __name__ == "__main__":
-    cities = read_cities(16)
+    cities = read_cities(18)
     pso = PSO(
-        iterations=200,
-        population_size=300,
-        w=0.5,  # Hệ số trọng số quán tính
-        c1=1.3,  # Hệ số học
-        c2=1.5,  # Hệ số học
+        iterations=10000,
+        population_size=500,
+        c1=1.4,
+        c2=1.4,
         cities=cities,
     )
     pso.run()
-    print(f"cost: {pso.gbest.pbest_cost}\t| gbest: {pso.gbest.pbest}")
+    print(f"Cost: {pso.gbest.pbest_cost}\nGbest: {pso.gbest.pbest}")
     x_list, y_list = [], []
     for city in pso.gbest.pbest:
         x_list.append(city.x)
@@ -145,7 +133,7 @@ if __name__ == "__main__":
     x_list.append(pso.gbest.pbest[0].x)
     y_list.append(pso.gbest.pbest[0].y)
     fig = plt.figure(1)
-    fig.suptitle("pso TSP")
+    fig.suptitle("PSO TSP")
 
     plt.plot(x_list, y_list, "ro")
     plt.plot(x_list, y_list)

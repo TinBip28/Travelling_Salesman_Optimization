@@ -103,7 +103,7 @@ class PSO:
                 plt.plot(x_list, y_list, "ro")
                 plt.plot(x_list, y_list, "g--")
                 plt.draw()
-                plt.pause(0.05)
+                plt.pause(0.001)
             self.gcost_iter.append(self.gbest.pbest_cost)
             for particle in self.particles:
                 particle.clear_velocity()
@@ -144,10 +144,10 @@ class PSO:
 
 
 if __name__ == "__main__":
-    cities = read_cities(25)
+    cities = read_cities(16)
     pso = PSO(
-        iterations=1200,
-        population_size=600,
+        iterations=400,
+        population_size=300,
         pbest_probability=0.9,
         gbest_probability=0.02,
         cities=cities,
